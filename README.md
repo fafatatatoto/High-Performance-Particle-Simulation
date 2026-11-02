@@ -5,7 +5,7 @@ A 2-D short-range particle simulation, sped up two ways: with **OpenMP** on a si
 | | Speedup | Hardware | Baseline |
 |---|---|---|---|
 | OpenMP | **17×** | 64 cores, 1 node | optimized serial code |
-| MPI | **110×** | 96 processes, 4 nodes | optimized serial code |
+| MPI | **140×** | 96 processes, 4 nodes | optimized serial code |
 
 Both versions were checked against reference outputs for correctness.
 
