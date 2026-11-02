@@ -9,6 +9,14 @@ A 2-D short-range particle simulation, sped up two ways: with **OpenMP** on a si
 
 Both versions were checked against reference outputs for correctness.
 
+**Highlights**
+
+- Cut the force computation from O(n²) to O(n) with a spatial grid of linked lists.
+- Distributed the simulation with an MPI domain decomposition in which each process exchanges only boundary data with its two neighbors.
+- Used strong- and weak-scaling experiments and a per-phase timing breakdown to find where time goes and why MPI scales further than OpenMP.
+
+![Strong scaling, OpenMP and MPI](figures/strong_scaling_openmp_and_mpi.png)
+
 > Source code is kept private because this was a course project. It is available on request.
 
 ---
@@ -44,7 +52,7 @@ head[cell]          next[particle]
 
 cell 6  ──► P2 ──► P0 ──► (end)
 cell 13 ──► P1 ──► (end)
-cell 1  ──► G0 ──► (end)
+cell 1  ──► P3 ──► (end)
 other   ──► (end)              Most cells hold 0 or 1 particle.
 ```
 
@@ -104,6 +112,20 @@ flowchart LR
 
 **Communication.** All exchanges are only with the two neighboring processes, using non-blocking `MPI_Isend` / `MPI_Irecv` followed by a single `MPI_Waitall`, which cannot deadlock. Because a receiver can't know in advance how many particles will arrive, each exchange first sends the count, then the data. To save output, all particles are collected on one process with `MPI_Gatherv` and restored to their original order in O(n).
 
+## Hardware and setup
+
+| | OpenMP runs | MPI runs |
+|---|---|---|
+| CPU per node | 2 × Intel Xeon Gold 6538Y+, 32 cores each (64 cores), up to 2.2 GHz | 2 × Intel Xeon Gold 6226, 12 cores each (24 cores), 2.7 GHz |
+| Cache | 2 MB L2 per core, 60 MB L3 per socket | 1 MB L2 per core, 19.25 MB L3 per socket |
+| Memory layout | 2 NUMA domains (one per socket) | 2 NUMA domains (one per socket) |
+| Nodes used | 1 node, up to 64 threads | up to 4 nodes, 24 processes per node (96 total) |
+| Interconnect | (single node) | InfiniBand |
+
+No hyperthreading on either node type. Software: C++, OpenMP, MPI, CMake release build, Slurm. Every MPI timing is the average of 5 runs.
+
+The two versions ran on **different node types**, so comparisons between OpenMP and MPI times are approximate.
+
 ## Results
 
 ### Runtime versus problem size
@@ -116,7 +138,7 @@ On a log-log scale all versions have a slope close to 1: doubling the number of 
 
 ### Strong scaling: same problem, more cores
 
-![Strong scaling, OpenMP and MPI](figures/strong_scaling_openmp_and_mpi.png)
+The strong-scaling plot is shown at the top of this page.
 
 | MPI processes | 1 | 2 | 4 | 8 | 16 | 24 | 48 | 96 |
 |---|---|---|---|---|---|---|---|---|
@@ -146,7 +168,7 @@ OpenMP's runtime, by contrast, grows several times over as threads and problem s
 
 ### Why OpenMP is slower than MPI
 
-It is not only that MPI used more hardware. On a **single node**, MPI with 24 processes finishes 500K particles in 2.04 s, while OpenMP with 64 threads takes 3.36 s. With fewer cores on the same machine, MPI is still faster. The difference comes from how each version uses memory:
+It is not only that MPI used more hardware. On a **single node**, MPI with 24 processes finishes 500K particles in 2.04 s, while OpenMP with 64 threads takes 3.36 s. The nodes differ (MPI ran on 2.7 GHz Xeon Gold 6226 nodes, OpenMP on 2.2 GHz Xeon Gold 6538Y+ nodes), so part of that gap may be the hardware, but MPI is faster with far fewer cores, and OpenMP also stops scaling well within its own node. The difference comes mostly from how each version uses memory:
 
 | | OpenMP | MPI |
 |---|---|---|
@@ -174,7 +196,3 @@ Timing each phase on every process shows that computation dominates: about 90% o
 - **2-D block decomposition**, to stop communication from growing with the problem size in weak scaling.
 - **Overlap communication with computation.** Particles away from strip boundaries don't need ghosts, so their forces can be computed while ghost messages are in flight.
 - **Fewer message rounds per step,** for example by merging the count and data messages, to reduce latency on small problems.
-
-## Tools
-
-C++, OpenMP, MPI, CMake, Slurm.
