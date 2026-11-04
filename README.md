@@ -17,8 +17,6 @@ Both versions were checked against reference outputs for correctness.
 
 ![Strong scaling, OpenMP and MPI](figures/strong_scaling_openmp_and_mpi.png)
 
-> Source code is kept private because this was a course project. It is available on request.
-
 ---
 
 ## The problem
